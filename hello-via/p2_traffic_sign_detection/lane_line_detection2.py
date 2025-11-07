@@ -147,19 +147,19 @@ def calculate_control_signal(img, draw=None):
 
         # GIẢM các hệ số penalty để ít bị giảm tốc
         # Giảm tốc theo góc lái hiện tại (giảm ảnh hưởng)
-        angle_penalty = abs(steering_angle) * 0.4  # Giảm từ 0.15 → 0.12
+        angle_penalty = abs(steering_angle) * 0.6  # Giảm từ 0.15 → 0.12
 
         # Giảm tốc theo độ biến thiên tức thời (giảm ảnh hưởng)
-        change_penalty = steering_change * 0.4  # Giảm từ 0.8 → 0.5
+        change_penalty = steering_change * 0.5  # Giảm từ 0.8 → 0.5
 
         # Giảm tốc theo độ biến thiên trung bình (giảm ảnh hưởng)
-        avg_change_penalty = avg_steering_change * 0.5  # Giảm từ 0.6 → 0.4
+        avg_change_penalty = avg_steering_change * 0.8  # Giảm từ 0.6 → 0.4
 
         # Tính throttle cuối cùng
         throttle = base_throttle - angle_penalty - change_penalty - avg_change_penalty
 
         # Giới hạn throttle - TĂNG min và max
-        throttle = max(0.15, min(0.45, throttle))  # Tăng từ [0.08, 0.25] → [0.15, 0.45]
+        throttle = max(0.15, min(1, throttle))  # Tăng từ [0.08, 0.25] → [0.15, 0.45]
 
         status = "TRACKING"
 
