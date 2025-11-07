@@ -13,18 +13,19 @@ from PIL import Image
 from lane_line_detection2 import *
 from traffic_sign_detection import *
 
-# Initalize traffic sign classifier
+# Initialize traffic sign classifier
 traffic_sign_model = cv2.dnn.readNetFromONNX(
     "traffic_sign_classifier_lenet_v3.onnx")
 
-# Global queue to save current image
-# We need to run the sign classification model in a separate process
-# Use this queue as an intermediate place to exchange images
+# Queue để lưu traffic signs phát hiện được
+g_signs_queue = Queue(maxsize=5)
+
+# Queue để lưu ảnh cho visualization
 g_image_queue = Queue(maxsize=5)
 
-# Function to run sign classification model continuously
-# We will start a new process for this
-def process_traffic_sign_loop(g_image_queue):
+
+def process_traffic_sign_loop(g_image_queue, g_signs_queue):
+    """Process chạy song song để detect traffic signs"""
     while True:
         if g_image_queue.empty():
             time.sleep(0.1)
@@ -33,8 +34,14 @@ def process_traffic_sign_loop(g_image_queue):
 
         # Prepare visualization image
         draw = image.copy()
+
         # Detect traffic signs
-        detect_traffic_signs(image, traffic_sign_model, draw=draw)
+        signs = detect_traffic_signs(image, traffic_sign_model, draw=draw)
+
+        # Gửi kết quả vào queue để main process sử dụng
+        if not g_signs_queue.full():
+            g_signs_queue.put(signs)
+
         # Show the result to a window
         cv2.imshow("Traffic signs", draw)
         cv2.waitKey(1)
@@ -47,16 +54,20 @@ async def process_image(websocket):
         image = Image.open(BytesIO(base64.b64decode(data["image"])))
         image = np.asarray(image)
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
         image = cv2.resize(image, (640, 480))
-
 
         # Prepare visualization image
         draw = image.copy()
 
+        # Lấy thông tin biển báo từ queue (nếu có)
+        signs = []
+        if not g_signs_queue.empty():
+            signs = g_signs_queue.get()
 
-        # Send back throttle and steering angle
-        throttle, steering_angle = calculate_control_signal(image, draw=draw)
+        # Tính toán throttle và steering với thông tin biển báo
+        throttle, steering_angle = calculate_control_signal(
+            image, signs=signs, draw=draw
+        )
 
         # Update image to g_image_queue - used to run sign detection
         if not g_image_queue.full():
@@ -76,7 +87,12 @@ async def main():
     async with websockets.serve(process_image, "0.0.0.0", 4567, ping_interval=None):
         await asyncio.Future()  # run forever
 
+
 if __name__ == '__main__':
-    p = Process(target=process_traffic_sign_loop, args=(g_image_queue,))
+    # Khởi động process phát hiện biển báo
+    p = Process(target=process_traffic_sign_loop,
+                args=(g_image_queue, g_signs_queue))
     p.start()
+
+    # Chạy main process
     asyncio.run(main())
